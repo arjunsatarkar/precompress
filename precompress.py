@@ -24,6 +24,46 @@ dirname, clobber = args.dirname, args.clobber
 
 write_mode = "wb" if clobber else "xb"
 
+
+def compress(
+    path: pathlib.Path, compress_fn, name: str, compressed_suffix: str, orig_size
+) -> None:
+    compressed = compress_fn(path)
+    compressed_size = len(compressed)
+    logging.info("%s-compressed size is %s", name, compressed_size)
+
+    if compressed_size >= orig_size:
+        logging.info("Not writing %s-compressed output", name)
+        return
+
+    compressed_path = path.with_suffix(path.suffix + compressed_suffix)
+    with open(compressed_path, write_mode) as f:
+        f.write(compressed)
+    logging.info("Wrote %s-compressed output to %s", name, compressed_path)
+
+
+def gzip_compress(path):
+    with open(path, "rb") as f:
+        return gzip.compress(f.read(), 9)
+
+
+def brotli_compress(path):
+    result = subprocess.run(
+        [
+            "brotli",
+            "-9",
+            "--stdout",
+            *(["--force"] if clobber else []),
+            "--",
+            str(path),
+        ],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("brotli returned nonzero exit code")
+    return result.stdout
+
+
 dirname = pathlib.Path(dirname).resolve(True)
 for path in dirname.rglob("*"):
     if not path.is_file() or path.is_symlink() or path.suffix in COMPRESSED_SUFFIXES:
@@ -32,21 +72,5 @@ for path in dirname.rglob("*"):
     orig_size = path.stat().st_size
     logging.info("Original size is %s bytes", orig_size)
 
-    with open(path, "rb") as f:
-        gzipped = gzip.compress(f.read(), 9)
-    gzipped_size = len(gzipped)
-    logging.info("Gzipped size is %s", gzipped_size)
-    if len(gzipped) >= orig_size:
-        logging.info("Not writing gzipped output")
-        continue
-    gzipped_path = path.with_suffix(path.suffix + ".gz")
-    with open(gzipped_path, write_mode) as f:
-        f.write(gzipped)
-    logging.info("Wrote gzipped output to %s", gzipped_path)
-
-    result = subprocess.run(
-        ["brotli", "-9", "--squash", *(["--force"] if clobber else []), "--", str(path)]
-    )
-    if result.returncode != 0:
-        raise OSError("Brotli returned nonzero exit code: %s", result.returncode)
-    logging.info("Ran brotli on the file")
+    compress(path, gzip_compress, "gzip", ".gz", orig_size)
+    compress(path, brotli_compress, "brotli", ".br", orig_size)
