@@ -33,7 +33,9 @@ dirname, clobber = args.dirname, args.clobber
 write_mode = "wb" if clobber else "xb"
 
 
-def streaming_compress(orig_path: pathlib.Path, out_path: pathlib.Path, compress_chunk, finish) -> None:
+def streaming_compress(
+    orig_path: pathlib.Path, out_path: pathlib.Path, compress_chunk, finish
+) -> None:
     orig_size = orig_path.stat().st_size
     written_size = 0
     with open(orig_path, "rb") as orig_file:
@@ -55,9 +57,10 @@ def streaming_compress(orig_path: pathlib.Path, out_path: pathlib.Path, compress
         out_path.unlink()
     else:
         logging.info(
-            "Compressed to %s bytes (%.1f%%)",
+            "Compressed to %s bytes (%.1f%%, %s)",
             written_size,
             written_size / orig_size * 100,
+            written_size - orig_size,
         )
 
 
@@ -69,9 +72,19 @@ for path in dirname.rglob("*"):
 
     logging.info("Compressing with gzip")
     # Documented to write gzip-compatible output with this wbits value
-    gzip_compressor = zlib.compressobj(9, wbits=zlib.MAX_WBITS + 16)    
-    streaming_compress(path, path.with_suffix(path.suffix + ".gz"), gzip_compressor.compress, gzip_compressor.flush)
+    gzip_compressor = zlib.compressobj(9, wbits=zlib.MAX_WBITS + 16)
+    streaming_compress(
+        path,
+        path.with_suffix(path.suffix + ".gz"),
+        gzip_compressor.compress,
+        gzip_compressor.flush,
+    )
 
     logging.info("Compressing with brotli")
     brotli_compressor = brotli.Compressor(quality=11)
-    streaming_compress(path, path.with_suffix(path.suffix + ".br"), brotli_compressor.process, brotli_compressor.finish)
+    streaming_compress(
+        path,
+        path.with_suffix(path.suffix + ".br"),
+        brotli_compressor.process,
+        brotli_compressor.finish,
+    )
