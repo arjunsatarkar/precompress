@@ -8,8 +8,6 @@
 import brotli
 
 import argparse
-import contextlib
-import io
 import logging
 import pathlib
 import zlib
